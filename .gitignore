@@ -1,0 +1,32 @@
+# Build directories
+build/
+cmake-build-*/
+out/
+bin/
+
+# CMake specific
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Makefile
+cmake_install.cmake
+compile_commands.json
+_deps/
+
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Object files and outputs
+*.o
+*.obj
+*.exe
+*.dll
+*.lib
+*.a
+*.map
+*.bin
+bochsout.txt
+__pycache__/

@@ -1,0 +1,12 @@
+set(CMAKE_SYSTEM_NAME Generic)
+set(CMAKE_SYSTEM_PROCESSOR i8086)
+
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+
+set(CMAKE_C_COMPILER ia16-elf-gcc.exe)
+set(CMAKE_CXX_COMPILER ia16-elf-g++.exe)
+set(CMAKE_ASM_COMPILER ia16-elf-as.exe)
+
+set(CMAKE_C_FLAGS_INIT "-Os -march=i8086 -mcmodel=small -Wall -Wextra")
+
+set(CMAKE_EXE_LINKER_FLAGS_INIT "")

@@ -1,0 +1,26 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 15,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "bare-metal-8086",
+      "displayName": "Bare-metal 8086 (ia16-elf-gcc)",
+      "description": "ROM Serial Bootloader cross-compilation for 8086/V50",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/bare-metal",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/ia16-toolchain.cmake"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "bare-metal-8086",
+      "configurePreset": "bare-metal-8086"
+    }
+  ]
+}
