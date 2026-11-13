@@ -43,6 +43,7 @@ static void uart_flush_rx(void)
 bool uart_selftest(uint16_t divisor)
 {
     g_last_divisor = divisor;
+    
 
     g_uart_test.scratch_ok = false;
     g_uart_test.divisor_ok = false;
