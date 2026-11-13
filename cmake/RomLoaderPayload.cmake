@@ -92,6 +92,7 @@ function(add_romloader_payload)
         "-T${RL_LINKER_SCRIPT}"
         "-Wl,-Map=${RL_TARGET}.map"
         "-Wl,--gc-sections"
+        "-Wl,--no-warn-rwx-segments"
     )
 
     set(BIN_FILE "${CMAKE_CURRENT_BINARY_DIR}/${RL_TARGET}.bin")
