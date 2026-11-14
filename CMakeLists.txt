@@ -63,6 +63,23 @@ if (PROJECT_IS_TOP_LEVEL)
             COMMENT "Generating 32KB ROM image (${PROJECT_NAME}.bin)..."
     )
 
+    add_romloader_payload(
+            TARGET ${PROJECT_NAME}-ram
+            SEG 2000
+            OFF 0000
+            SOURCES
+                src/main.c
+                src/vga.c
+                src/kbd.c
+                src/uart.c
+                src/loader.c
+                src/stdfunc.c
+            INCLUDES
+                ${CMAKE_CURRENT_SOURCE_DIR}/inc
+                ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    define_filename_macro(${PROJECT_NAME}-ram)
+
     add_custom_command(
             OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/hello_payload.bin"
             COMMAND ${CMAKE_ASM_NASM_COMPILER} -f bin "${CMAKE_CURRENT_SOURCE_DIR}/payloads/hello_payload.asm" -o "${CMAKE_CURRENT_BINARY_DIR}/hello_payload.bin"

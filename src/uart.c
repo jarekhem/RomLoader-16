@@ -1,6 +1,24 @@
 #include "uart.h"
 
+const uint16_t g_uart_port_bases[UART_PORT_COUNT] = {
+    UART_COM1_BASE,
+    UART_COM2_BASE,
+    UART_COM3_BASE,
+    UART_COM4_BASE
+};
+
+const char* const g_uart_port_names[UART_PORT_COUNT] = {
+    "COM1",
+    "COM2",
+    "COM3",
+    "COM4"
+};
+
+uint8_t g_uart_port_idx = UART_DEFAULT_PORT_IDX;
+uint16_t g_uart_base = UART_COM3_BASE;
+
 UartSelfTestResult g_uart_test;
+UartSelfTestResult g_uart_results[UART_PORT_COUNT];
 
 static uint16_t g_last_divisor = UART_DIV_115200;
 static bool g_fifo_want_enable = true;
@@ -108,6 +126,19 @@ bool uart_selftest(uint16_t divisor)
     io_wait();
 
     g_uart_test.divisor_ok = (dll_chk == exp_dll) && (dlm_chk == exp_dlm) && (lcr_chk == 0x03);
+
+    /* Fast-fail if neither scratchpad nor divisor/LCR responds (unmapped I/O port) */
+    if (!g_uart_test.scratch_ok && !g_uart_test.divisor_ok)
+    {
+        outb(UART_REG_MCR, g_mcr_mode);
+        io_wait();
+        g_uart_test.lsr_val = inb(UART_REG_LSR);
+        g_uart_test.msr_val = inb(UART_REG_MSR);
+        g_uart_test.iir_val = inb(UART_REG_IIR_FCR);
+        __asm__ __volatile__("sti");
+        g_uart_results[g_uart_port_idx] = g_uart_test;
+        return false;
+    }
 
     /* Allow baud generator and shift registers to finish any power-on frame */
     uart_delay_loops(1000);
@@ -244,12 +275,60 @@ bool uart_selftest(uint16_t divisor)
                          g_uart_test.loopback_tx_ok &&
                          g_uart_test.loopback_rx_ok;
 
+    g_uart_results[g_uart_port_idx] = g_uart_test;
     return g_uart_test.passed;
+}
+
+uint8_t uart_test_all(uint16_t divisor)
+{
+    uint8_t saved_idx = g_uart_port_idx;
+    uint8_t mask = 0;
+
+    for (uint8_t i = 0; i < UART_PORT_COUNT; i++)
+    {
+        g_uart_port_idx = i;
+        g_uart_base = g_uart_port_bases[i];
+        if (uart_selftest(divisor))
+        {
+            mask |= (uint8_t)(1U << i);
+        }
+    }
+
+    g_uart_port_idx = saved_idx;
+    g_uart_base = g_uart_port_bases[saved_idx];
+    g_uart_test = g_uart_results[saved_idx];
+    return mask;
+}
+
+bool uart_select_port(uint8_t port_idx)
+{
+    if (port_idx >= UART_PORT_COUNT)
+        port_idx = UART_DEFAULT_PORT_IDX;
+
+    g_uart_port_idx = port_idx;
+    g_uart_base = g_uart_port_bases[port_idx];
+    return uart_selftest(g_last_divisor);
 }
 
 void uart_init(uint16_t divisor)
 {
-    uart_selftest(divisor);
+    g_uart_port_idx = UART_DEFAULT_PORT_IDX;
+    g_uart_base = g_uart_port_bases[UART_DEFAULT_PORT_IDX];
+
+    uint8_t mask = uart_test_all(divisor);
+    if (!g_uart_results[UART_DEFAULT_PORT_IDX].passed && mask != 0)
+    {
+        for (uint8_t i = 0; i < UART_PORT_COUNT; i++)
+        {
+            if (g_uart_results[i].passed)
+            {
+                g_uart_port_idx = i;
+                g_uart_base = g_uart_port_bases[i];
+                g_uart_test = g_uart_results[i];
+                break;
+            }
+        }
+    }
 }
 
 void uart_toggle_fifo(void)
@@ -268,6 +347,7 @@ void uart_cycle_mcr(void)
         g_mcr_mode = 0x00; /* All modem outputs deasserted (like serial_monitor) */
 
     g_uart_test.mcr_setting = g_mcr_mode;
+    g_uart_results[g_uart_port_idx].mcr_setting = g_mcr_mode;
     outb(UART_REG_MCR, g_mcr_mode);
     io_wait();
     uart_flush_rx();

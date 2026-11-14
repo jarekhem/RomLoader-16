@@ -34,3 +34,18 @@ _ram_start:
     ; If app_main returns (e.g. on ESC), warm-reboot back into RomLoader-16
     cli
     jmp 0xFFFF:0x0000
+
+global loader_jump_far
+loader_jump_far:
+    cli
+    cld
+    mov bp, sp
+    mov ax, [bp+2]      ; seg
+    mov bx, [bp+4]      ; off
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov sp, 0xFFFE
+    push ax             ; target CS
+    push bx             ; target IP
+    retf

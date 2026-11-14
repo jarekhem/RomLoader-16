@@ -78,14 +78,14 @@ static bool uart_recv_block_far(uint16_t seg, uint16_t off, uint16_t size)
         uint16_t chunk = (rem_in_seg == 0 || size < rem_in_seg) ? size : rem_in_seg;
         uint16_t di = off;
         uint16_t cx = chunk;
+        uint16_t dx = UART_REG_LSR;
 
         __asm__ __volatile__(
             "push %%es\n\t"
-            "movw %2, %%es\n\t"
+            "movw %3, %%es\n\t"
             "cld\n\t"
             "1:\n\t"
             "movw $0xFFFF, %%bx\n\t"
-            "movw %3, %%dx\n\t"
             "2:\n\t"
             "inb %%dx, %%al\n\t"
             "testb $0x01, %%al\n\t"
@@ -94,15 +94,16 @@ static bool uart_recv_block_far(uint16_t seg, uint16_t off, uint16_t size)
             "jnz 2b\n\t"
             "jmp 4f\n\t"
             "3:\n\t"
-            "movw %4, %%dx\n\t"
+            "subw $5, %%dx\n\t"
             "inb %%dx, %%al\n\t"
+            "addw $5, %%dx\n\t"
             "stosb\n\t"
             "loop 1b\n\t"
             "4:\n\t"
             "pop %%es"
-            : "+D"(di), "+c"(cx)
-            : "r"(seg), "i"(UART_REG_LSR), "i"(UART_REG_RBR_THR_DLL)
-            : "ax", "bx", "dx", "memory", "cc"
+            : "+D"(di), "+c"(cx), "+d"(dx)
+            : "rm"(seg)
+            : "ax", "bx", "memory", "cc"
         );
 
         uint16_t received = chunk - cx;
@@ -274,9 +275,15 @@ bool loader_poll_serial(void)
 
     /* Stay in a tight polling loop while a multi-byte frame is arriving
      * so we never drop bytes at 115200 baud during slow VGA screen updates. */
+    uint8_t burst_count = 0;
     while (1)
     {
         if (process_rx_byte(b))
+        {
+            return true;
+        }
+
+        if (g_sync_step == 0 && ++burst_count >= 64)
         {
             return true;
         }

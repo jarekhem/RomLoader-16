@@ -18,6 +18,10 @@
 #define AT_MAKE_T       0x2C
 #define AT_MAKE_F       0x2B
 #define AT_MAKE_M       0x3A
+#define AT_MAKE_F1      0x05
+#define AT_MAKE_F2      0x06
+#define AT_MAKE_F3      0x04
+#define AT_MAKE_F4      0x0C
 
 static bool kbc_wait_write(void)
 {
@@ -142,6 +146,10 @@ bool kbd_get_key(uint16_t* out_key)
         case AT_MAKE_T:     *out_key = KEY_T;     return true;
         case AT_MAKE_F:     *out_key = KEY_F;     return true;
         case AT_MAKE_M:     *out_key = KEY_M;     return true;
+        case AT_MAKE_F1:    *out_key = KEY_F1;    return true;
+        case AT_MAKE_F2:    *out_key = KEY_F2;    return true;
+        case AT_MAKE_F3:    *out_key = KEY_F3;    return true;
+        case AT_MAKE_F4:    *out_key = KEY_F4;    return true;
         }
     }
     return false;

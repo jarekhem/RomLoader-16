@@ -5,17 +5,27 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define ATTR_BG         0x17 /* Light Grey on Blue */
-#define ATTR_BORDER     0x1F /* Bright White on Blue */
-#define ATTR_HEADER     0x70 /* Black on Light Grey */
-#define ATTR_LABEL      0x1B /* Bright Cyan on Blue */
-#define ATTR_VALUE      0x1E /* Yellow on Blue */
-#define ATTR_STATUS_OK  0x1A /* Bright Green on Blue */
-#define ATTR_STATUS_ERR 0x4F /* Bright White on Red */
-#define ATTR_FOOTER     0x70 /* Black on Light Grey */
+#define ATTR_BG           0x17 /* Light Grey on Blue */
+#define ATTR_BORDER       0x1F /* Bright White on Blue */
+#define ATTR_HEADER       0x70 /* Black on Light Grey */
+#define ATTR_LABEL        0x1B /* Bright Cyan on Blue */
+#define ATTR_VALUE        0x1E /* Yellow on Blue */
+#define ATTR_STATUS_OK    0x1A /* Bright Green on Blue */
+#define ATTR_STATUS_ERR   0x4F /* Bright White on Red */
+#define ATTR_PORT_SEL_OK  0x2F /* Bright White on Green (Selected + Available) */
+#define ATTR_PORT_AVAIL   0x1A /* Bright Green on Blue (Available) */
+#define ATTR_PORT_UNAVAIL 0x18 /* Dark Grey on Blue (Unavailable) */
+#define ATTR_FOOTER       0x70 /* Black on Light Grey */
 
 static uint8_t g_prev_lsr = 0xFF;
 static uint8_t g_prev_msr = 0xFF;
+
+static const char* const k_port_badges[UART_PORT_COUNT] = {
+    "[F1]COM1:3F8",
+    "[F2]COM2:2F8",
+    "[F3]COM3:3E8",
+    "[F4]COM4:2E8"
+};
 
 static void clear_line_range(uint8_t x_start, uint8_t x_end, uint8_t y, uint8_t attr)
 {
@@ -30,13 +40,13 @@ static void draw_static_ui(void)
     /* Top Header Bar */
     for (uint8_t x = 0; x < VGA_COLS; x++)
         vga_draw_char(x, 0, ' ', ATTR_HEADER);
-    vga_print(2, 0, "8086 / V50 Bare-Metal ROM Serial Bootloader v0.2", ATTR_HEADER);
+    vga_print(2, 0, "8086 / V50 Bare-Metal ROM Serial Bootloader v0.3", ATTR_HEADER);
 
     /* Main Panel Box */
-    vga_draw_box(2, 2, 76, 20, ATTR_BG, ATTR_BORDER, "Serial Loader & COM3 Hardware Monitor");
+    vga_draw_box(2, 2, 76, 20, ATTR_BG, ATTR_BORDER, "Serial Loader & UART Hardware Monitor");
 
-    vga_print(5, 4,  "UART Port      :", ATTR_LABEL);
-    vga_print(5, 6,  "COM3 Self-Test :", ATTR_LABEL);
+    vga_print(5, 4,  "UART Ports     :", ATTR_LABEL);
+    vga_print(5, 6,  "UART Self-Test :", ATTR_LABEL);
     vga_print(5, 8,  "UART Registers :", ATTR_LABEL);
     vga_print(5, 10, "RX Activity    :", ATTR_LABEL);
 
@@ -48,7 +58,7 @@ static void draw_static_ui(void)
     /* Bottom Footer Bar */
     for (uint8_t x = 0; x < VGA_COLS; x++)
         vga_draw_char(x, 24, ' ', ATTR_FOOTER);
-    vga_print(2, 24, "[ENTER] Run  [SPACE] Beacon  [T] Test COM3  [F] Toggle FIFO  [M] Cycle MCR", ATTR_FOOTER);
+    vga_print(2, 24, "[F1-F4] Port  [ENTER] Run  [SPACE] Beacon  [T] Test All  [F] FIFO  [M] MCR", ATTR_FOOTER);
 }
 
 static void update_uart_regs_ui(uint8_t lsr, uint8_t msr, uint8_t iir, uint8_t scr)
@@ -56,26 +66,41 @@ static void update_uart_regs_ui(uint8_t lsr, uint8_t msr, uint8_t iir, uint8_t s
     uint8_t x = 23;
     x = vga_print(x, 8, "LSR=0x", ATTR_VALUE);
     x = vga_print_hex8(x, 8, lsr, ATTR_VALUE);
-    x = vga_print(x, 8, "  MSR=0x", ATTR_VALUE);
+    x = vga_print(x, 8, " MSR=0x", ATTR_VALUE);
     x = vga_print_hex8(x, 8, msr, ATTR_VALUE);
-    x = vga_print(x, 8, "  IIR=0x", ATTR_VALUE);
+    x = vga_print(x, 8, " IIR=0x", ATTR_VALUE);
     x = vga_print_hex8(x, 8, iir, ATTR_VALUE);
-    x = vga_print(x, 8, "  SCR=0x", ATTR_VALUE);
-    vga_print_hex8(x, 8, scr, ATTR_VALUE);
+    x = vga_print(x, 8, " SCR=0x", ATTR_VALUE);
+    x = vga_print_hex8(x, 8, scr, ATTR_VALUE);
+    x = vga_print(x, 8, " MCR=0x", ATTR_VALUE);
+    x = vga_print_hex8(x, 8, g_uart_test.mcr_setting, ATTR_VALUE);
+    x = vga_print(x, 8, " FIFO:", ATTR_VALUE);
+    vga_print(x, 8, g_uart_test.fifo_enabled ? "ON " : "OFF",
+              g_uart_test.fifo_enabled ? ATTR_STATUS_OK : ATTR_VALUE);
 }
 
 static void update_status_ui(void)
 {
-    /* Row 4: Port & active FIFO / MCR config */
+    /* Row 4: All 4 ports (F1..F4) with availability & active selection highlight */
     clear_line_range(23, 76, 4, ATTR_BG);
     uint8_t x = 23;
-    x = vga_print(x, 4, "0x03E8 / COM3 (115200 8N1)  FIFO:", ATTR_VALUE);
-    x = vga_print(x, 4, g_uart_test.fifo_enabled ? "ON " : "OFF",
-                  g_uart_test.fifo_enabled ? ATTR_STATUS_OK : ATTR_VALUE);
-    x = vga_print(x, 4, "  MCR:0x", ATTR_VALUE);
-    vga_print_hex8(x, 4, g_uart_test.mcr_setting, ATTR_VALUE);
+    for (uint8_t i = 0; i < UART_PORT_COUNT; i++)
+    {
+        uint8_t attr;
+        if (i == g_uart_port_idx)
+        {
+            attr = g_uart_results[i].passed ? ATTR_PORT_SEL_OK : ATTR_STATUS_ERR;
+        }
+        else
+        {
+            attr = g_uart_results[i].passed ? ATTR_PORT_AVAIL : ATTR_PORT_UNAVAIL;
+        }
+        x = vga_print(x, 4, k_port_badges[i], attr);
+        if (i < UART_PORT_COUNT - 1)
+            vga_draw_char(x++, 4, ' ', ATTR_BG);
+    }
 
-    /* Row 6: COM3 Controller Self-Test details */
+    /* Row 6: Active Controller Self-Test details */
     clear_line_range(23, 76, 6, ATTR_BG);
     x = 23;
     if (g_uart_test.passed)
@@ -171,7 +196,8 @@ static void update_status_ui(void)
 
     /* Row 19: Status Line */
     clear_line_range(23, 76, 19, ATTR_BG);
-    vga_print(23, 19, g_loader.status_msg, ATTR_STATUS_OK);
+    vga_print(23, 19, g_loader.status_msg,
+              g_uart_test.passed ? ATTR_STATUS_OK : ATTR_STATUS_ERR);
 }
 
 void app_main(void)
@@ -183,14 +209,17 @@ void app_main(void)
 
     if (!g_uart_test.passed)
     {
-        g_loader.status_msg = "COM3 self-test FAILED! Check 0x03E8 hardware.";
+        g_loader.status_msg = "UART self-test FAILED!";
     }
 
     draw_static_ui();
     update_status_ui();
 
-    /* Send startup banner over serial */
-    uart_puts("\r\n[RomLoader-16] COM3 (0x03E8) Ready.\r\n");
+    /* Send startup banner over active serial port if it passed self-test */
+    if (g_uart_test.passed)
+    {
+        uart_puts("\r\n[RomLoader-16 v0.3] Ready.\r\n");
+    }
 
     uint16_t reg_poll_div = 0;
 
@@ -216,7 +245,24 @@ void app_main(void)
         uint16_t key;
         if (kbd_get_key(&key))
         {
-            if (key == KEY_ENTER && g_loader.payload_ready)
+            if (key == KEY_F1 || key == KEY_F2 || key == KEY_F3 || key == KEY_F4)
+            {
+                uint8_t idx = 0;
+                if (key == KEY_F2) idx = 1;
+                else if (key == KEY_F3) idx = 2;
+                else if (key == KEY_F4) idx = 3;
+
+                bool ok = uart_select_port(idx);
+                g_loader.status_msg = ok
+                    ? "Waiting for serial command (55 AA 'R' 'L')..."
+                    : "UART self-test FAILED (port unavailable).";
+                update_status_ui();
+                if (ok)
+                {
+                    uart_puts("\r\n[RomLoader-16] Ready.\r\n");
+                }
+            }
+            else if (key == KEY_ENTER && g_loader.payload_ready)
             {
                 g_loader.status_msg = "Jumping to payload...";
                 update_status_ui();
@@ -224,14 +270,23 @@ void app_main(void)
             }
             else if (key == KEY_SPACE)
             {
-                uart_puts("[RomLoader-16] PING beacon\r\n");
-                g_loader.status_msg = "Sent UART beacon on COM3 (0x03E8).";
+                if (g_uart_test.passed)
+                {
+                    uart_puts("[RomLoader-16] PING beacon\r\n");
+                    g_loader.status_msg = "Sent UART beacon.";
+                }
+                else
+                {
+                    g_loader.status_msg = "UART self-test FAILED (cannot send beacon).";
+                }
                 update_status_ui();
             }
             else if (key == KEY_T)
             {
-                bool ok = uart_selftest(UART_DIV_115200);
-                g_loader.status_msg = ok ? "COM3 self-test PASSED." : "COM3 self-test FAILED!";
+                uart_test_all(UART_DIV_115200);
+                g_loader.status_msg = g_uart_test.passed
+                    ? "Self-test PASSED."
+                    : "Self-test FAILED!";
                 update_status_ui();
             }
             else if (key == KEY_F)

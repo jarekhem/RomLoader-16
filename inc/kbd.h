@@ -15,6 +15,10 @@
 #define KEY_T     0x1474
 #define KEY_F     0x2166
 #define KEY_M     0x326D
+#define KEY_F1    0x3B00
+#define KEY_F2    0x3C00
+#define KEY_F3    0x3D00
+#define KEY_F4    0x3E00
 
 void kbd_init(void);
 bool kbd_get_scancode(uint8_t* out_scancode);
